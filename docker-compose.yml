@@ -1,0 +1,78 @@
+version: '3.0'
+
+services:
+  nginx:
+    build:
+      context: docker/nginx
+    volumes:
+      - ./www:/var/www/logger
+    container_name: nginx
+    restart: always
+    ports:
+      - "8081:81"
+    networks:
+      myProject: { }
+
+  php-fpm:
+    build:
+      context: docker/php-fpm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+    container_name: php-fpm
+    depends_on:
+      - mysql
+    networks:
+      - myProject
+    volumes:
+      - ./www:/var/www/logger
+      - ./docker/php-fpm/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+    environment:
+      PHP_IDE_CONFIG: "serverName=php"
+
+  mysql:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    container_name: d_mysql
+    environment:
+      - "MYSQL_ROOT_PASSWORD=root"
+      - "MYSQL_DATABASE=logger"
+      - "MYSQL_USER=admin"
+      - "MYSQL_PASSWORD=root"
+    ports:
+      - "3337:3306"
+    networks:
+      - myProject
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - 2181:2181
+
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - 9093:9092
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_CREATE_TOPICS: "test:1:1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9093
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+      - KAFKA_CLUSTERS_0_READONLY=false
+
+networks:
+  myProject:
+    driver: bridge
